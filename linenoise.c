@@ -176,24 +176,14 @@ static void linenoiseAtExit(void);
 int linenoiseHistoryAdd(const char *line);
 static void refreshLine(struct linenoiseState *l);
 
-/* Debugging macro. */
-#if 0
-FILE *lndebug_fp = NULL;
-#define lndebug(...) \
-    do { \
-        if (lndebug_fp == NULL) { \
-            lndebug_fp = fopen("/tmp/lndebug.txt","a"); \
-            fprintf(lndebug_fp, \
-            "[%d %d %d] p: %d, rows: %d, rpos: %d, max: %d, oldmax: %d\n", \
-            (int)l->len,(int)l->pos,(int)l->oldpos,plen,rows,rpos, \
-            (int)l->maxrows,old_rows); \
-        } \
-        fprintf(lndebug_fp, ", " __VA_ARGS__); \
-        fflush(lndebug_fp); \
-    } while (0)
-#else
-#define lndebug(fmt, ...)
-#endif
+static void linenoiseEditMoveLeft(struct linenoiseState *l);
+static void linenoiseEditMoveRight(struct linenoiseState *l);
+static void linenoiseEditMoveHome(struct linenoiseState *l);
+static void linenoiseEditMoveEnd(struct linenoiseState *l);
+static void linenoiseEditHistoryNext(struct linenoiseState *l, int dir);
+static void linenoiseEditDelete(struct linenoiseState *l);
+static void linenoiseEditBackspace(struct linenoiseState *l);
+static void linenoiseEditDeletePrevWord(struct linenoiseState *l);
 
 /* ======================= Low level terminal handling ====================== */
 
@@ -471,6 +461,9 @@ static void abFree(struct abuf *ab) {
     free(ab->b);
 }
 
+static void refreshShowHints(struct abuf *ab, struct linenoiseState *l,
+  int plen);
+
 /* Helper of refreshSingleLine() and refreshMultiLine() to show hints
  * to the right of the prompt. */
 void refreshShowHints(struct abuf *ab, struct linenoiseState *l, int plen) {
@@ -558,20 +551,17 @@ static void refreshMultiLine(struct linenoiseState *l) {
      * going to the last row. */
     abInit(&ab);
     if (old_rows-rpos > 0) {
-        lndebug("go down %d", old_rows-rpos);
         snprintf(seq,64,"\x1b[%dB", old_rows-rpos);
         abAppend(&ab,seq,strlen(seq));
     }
 
     /* Now for every row clear it, go up. */
     for (j = 0; j < old_rows-1; j++) {
-        lndebug("clear+up");
         snprintf(seq,64,"\r\x1b[0K\x1b[1A");
         abAppend(&ab,seq,strlen(seq));
     }
 
     /* Clean the top line. */
-    lndebug("clear");
     snprintf(seq,64,"\r\x1b[0K");
     abAppend(&ab,seq,strlen(seq));
 
@@ -588,7 +578,6 @@ static void refreshMultiLine(struct linenoiseState *l) {
         l->pos == l->len &&
         (l->pos+plen) % l->cols == 0)
     {
-        lndebug("<newline>");
         abAppend(&ab,"\n",1);
         snprintf(seq,64,"\r");
         abAppend(&ab,seq,strlen(seq));
@@ -598,25 +587,21 @@ static void refreshMultiLine(struct linenoiseState *l) {
 
     /* Move cursor to right position. */
     rpos2 = (plen+l->pos+l->cols)/l->cols; /* current cursor relative row. */
-    lndebug("rpos2 %d", rpos2);
 
     /* Go up till we reach the expected positon. */
     if (rows-rpos2 > 0) {
-        lndebug("go-up %d", rows-rpos2);
         snprintf(seq,64,"\x1b[%dA", rows-rpos2);
         abAppend(&ab,seq,strlen(seq));
     }
 
     /* Set column. */
     col = (plen+(int)l->pos) % (int)l->cols;
-    lndebug("set col %d", 1+col);
     if (col)
         snprintf(seq,64,"\r\x1b[%dC", col);
     else
         snprintf(seq,64,"\r");
     abAppend(&ab,seq,strlen(seq));
 
-    lndebug("\n");
     l->oldpos = l->pos;
 
     if (write(fd,ab.b,ab.len) == -1) {} /* Can't recover from write error. */
@@ -632,6 +617,7 @@ static void refreshLine(struct linenoiseState *l) {
         refreshSingleLine(l);
 }
 
+static int linenoiseEditInsert(struct linenoiseState *l, char c);
 /* Insert the character 'c' at cursor current position.
  *
  * On error writing to the terminal -1 is returned, otherwise 0. */
@@ -1002,19 +988,21 @@ static int linenoiseRaw(char *buf, size_t buflen, const char *prompt) {
 static char *linenoiseNoTTY(void) {
     char *line = NULL;
     size_t len = 0, maxlen = 0;
+    char *oldval;
+    int c;
 
     while(1) {
         if (len == maxlen) {
             if (maxlen == 0) maxlen = 16;
             maxlen *= 2;
-            char *oldval = line;
+            oldval = line;
             line = realloc(line,maxlen);
             if (line == NULL) {
                 if (oldval) free(oldval);
                 return NULL;
             }
         }
-        int c = fgetc(stdin);
+        c = fgetc(stdin);
         if (c == EOF || c == '\n') {
             if (c == EOF && len == 0) {
                 free(line);
