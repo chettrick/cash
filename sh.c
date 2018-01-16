@@ -1,12 +1,14 @@
 #include <err.h>		/* err(3) */
-#include <limits.h>		/* PATH_MAX */
-#include <stdio.h>		/* printf(3) */
+#include <stdio.h>		/* printf(3), snprintf(3), readline(3) */
+#include <stddef.h>		/* size_t */
 #include <stdlib.h>		/* exit(3), free(3), getenv(3) */
 #include <string.h>		/* strdup(3) */
 #include <strings.h>		/* strcasecmp(3) */
 #include <unistd.h>		/* getcwd(3) */
 
-#include "linenoise.h"		/* line editing library */
+#include <linux/limits.h>	/* PATH_MAX */
+
+#include <readline/readline.h>	/* readline(3) */
 
 #define PROMPT_SIZE	5 + PATH_MAX + 3 + 1
 
@@ -36,7 +38,7 @@ main(int argc, char *argv[])
 	}
 
 	cwd_prompt(prompt, PROMPT_SIZE);
-	while ((line = linenoise(prompt)) != NULL) {
+	while ((line = readline(prompt)) != NULL) {
 		if (!strcasecmp(line, "exit")) {
 			free(line);
 			return 0;
@@ -75,7 +77,7 @@ cwd_prompt(char *prompt, int promptsize)
 #if 0
 	args usage();
 
-	char * to malloc'd array of paths = parse_path($PATH);
+	char * to mallocd array of paths = parse_path($PATH);
 	if char * is NULL then
 		use _PATH_DEFPATH from paths.h
 
@@ -83,11 +85,11 @@ cwd_prompt(char *prompt, int promptsize)
 
 //done	make up initial custom cwd prompt with function cwd_prompt(pre, post)
 
-//done	while get a line from linenoise using custom cwd prompt {
+//done	while get a line from readline using custom cwd prompt {
 // XXX actually have a flag set in proc struct, not a global
 		bg_flag = 0;	// Child process runs in foreground by default
 
-		struct proc p = parse_line(line); // Ret alloc'd struct or NULL
+		struct proc p = parse_line(line); // Ret allocd struct or NULL
 		if (p == NULL)
 			error message;
 
