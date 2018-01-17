@@ -6,11 +6,15 @@
 #include <strings.h>		/* strcasecmp(3) */
 #include <unistd.h>		/* getcwd(3) */
 
-#include <linux/limits.h>	/* PATH_MAX */
+#ifdef OPENBSD
+#include <limits.h>		/* sane location for PATH_MAX */
+#else
+#include <linux/limits.h>	/* insane location for PATH_MAX */
+#endif
 
 #include <readline/readline.h>	/* readline(3) */
 
-#define PROMPT_SIZE	5 + PATH_MAX + 3 + 1
+#define PROMPT_SIZE	(5 + PATH_MAX + 3 + 1)
 
 static void		cwd_prompt(char *, int);
 static void		usage(void);
