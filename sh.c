@@ -1,16 +1,11 @@
 #include <err.h>		/* err(3) */
+#include <limits.h>		/* PATH_MAX */
 #include <stdio.h>		/* printf(3), snprintf(3), readline(3) */
 #include <stddef.h>		/* size_t */
 #include <stdlib.h>		/* exit(3), free(3), getenv(3) */
 #include <string.h>		/* strdup(3) */
 #include <strings.h>		/* strcasecmp(3) */
 #include <unistd.h>		/* getcwd(3) */
-
-#ifdef OPENBSD
-#include <limits.h>		/* sane location for PATH_MAX */
-#else
-#include <linux/limits.h>	/* insane location for PATH_MAX */
-#endif
 
 #include <readline/readline.h>	/* readline(3) */
 

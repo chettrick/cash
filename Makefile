@@ -2,8 +2,6 @@ PROG=		ssi
 
 SRCS=		sh.c
 
-CFLAGS+=	-DOPENBSD
-
 CFLAGS+=	-g
 CFLAGS+=	-O2 -pipe
 CFLAGS+=	-fPIC
