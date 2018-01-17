@@ -16,6 +16,11 @@
 
 #define PROMPT_SIZE	(5 + PATH_MAX + 3 + 1)
 
+struct proc {
+	struct	proc *next;
+	int	bar;
+};
+
 static void		cwd_prompt(char *, int);
 static void		usage(void);
 
@@ -87,13 +92,13 @@ cwd_prompt(char *prompt, int promptsize)
 
 	save $HOME directory for use with ~
 
-//done	make up initial custom cwd prompt with function cwd_prompt(pre, post)
+done	make up initial custom cwd prompt with function cwd_prompt(pre, post)
 
-//done	while get a line from readline using custom cwd prompt {
-// XXX actually have a flag set in proc struct, not a global
-		bg_flag = 0;	// Child process runs in foreground by default
+done	while get a line from readline using custom cwd prompt {
+XXX actually have a flag set in proc struct, not a global
+		bg_flag = 0;	/* Child process runs in fg by default */
 
-		struct proc p = parse_line(line); // Ret allocd struct or NULL
+		struct proc p = parse_line(line); /* Ret alloc struct or NULL */
 		if (p == NULL)
 			error message;
 
@@ -112,10 +117,10 @@ cwd_prompt(char *prompt, int promptsize)
 				else
 					save pwd in oldpwd
 					chdir() to new dir in arg
-			else // Two or more args
+			else /* Two or more args */
 				error "ssi: cd: too many arguments"
 		else if cmd is 'bglist' (or 'jobs')
-			// print out list of background jobs
+			/* print out list of background jobs */
 			while (struct.next != NULL) {
 				print curproc "pid: path options"
 				curstruct = struct.next
@@ -128,7 +133,7 @@ cwd_prompt(char *prompt, int promptsize)
 				fork and exec, but dont wait.
 				detach child from stdin, stdout, stderr
 				add to processes linked list
-			else	// fg. Just regular fork() and exec().
+			else	/* fg. Just regular fork() and exec(). */
 				fork and exec
 				wait on child exit.
 
