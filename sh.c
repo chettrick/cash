@@ -169,6 +169,11 @@ parse_args(char *line)
 
 	printf("argc: %d\n", argc);		/* XXX */
 
+	/* No args, just whitespace. Do nothing. */
+	if (argc == 0) {
+		return NULL;
+	}
+
 	char		 *argv[argc + 1];	/* XXX - Here bc needs argc. */
 
 	/* Need a copy of the line, since it will be clobbered. */
@@ -184,8 +189,7 @@ parse_args(char *line)
 		}
 	}
 	*ap = NULL;
-
-	argv[argc] = NULL;
+	argv[argc] = (char *)NULL;		/* Last item must be NULL. */
 
 
 	/* Need newargv on the heap, not on the stack like argv. */
