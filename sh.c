@@ -8,6 +8,7 @@
  */
 
 #include <err.h>		/* err(3) */
+#include <libgen.h>		/* basename(3) */
 #include <limits.h>		/* PATH_MAX */
 #include <stdio.h>		/* printf(3), snprintf(3), readline(3) */
 #include <stddef.h>		/* size_t */
@@ -40,7 +41,12 @@ struct proc {
 
 static void		 cwd_prompt(char *, size_t);
 static struct args	*parse_args(char *);
+static void		 cmd_run(struct args *, const char *);
 static void		 usage(void) __attribute__ ((__noreturn__));
+
+extern char	 *__progname;
+
+/* XXX char	 *oldpwd = NULL; */	/* Old working directory. */
 
 /*
  * SSI: Simple Shell Interpreter
@@ -64,10 +70,6 @@ main(int argc, char *argv[])
 	argc--;
 	argv++;			/* XXX To satiate the compiler. */
 
-#if 0
-	printf("\n%s\n", getenv("PATH"));
-#endif
-
 	if ((home_dir = getenv("HOME")) == NULL) {
 		fprintf(stderr, "HOME environment variable not set");
 		err(1, "getenv");
@@ -81,19 +83,21 @@ main(int argc, char *argv[])
 			continue;		/* Skip blank lines. */
 		}
 
-	printf("argc: %d\n", args->argc);		/* XXX */
-	int i;						/* XXX */
-	for (i = 0; args->argv[i] != '\0'; i++) {	/* XXX */
-		printf("argv[%d]: %s\n", i, args->argv[i]);	/* XXX */
-	}						/* XXX */
-	printf("Command name: %s\n", args->file);	/* XXX */
-	printf("You wrote: %s\n", line);		/* XXX */
+		printf("argc: %d\n", args->argc);		/* XXX */
+		int i;						/* XXX */
+		for (i = 0; args->argv[i] != '\0'; i++) {	/* XXX */
+			printf("argv[%d]: %s\n", i, args->argv[i]); /* XXX */
+		}						/* XXX */
+		printf("Command name: %s\n", args->file);	/* XXX */
+		printf("You wrote: %s\n", line);		/* XXX */
 
-/* XXX Get cmd from struct */
-		if (!strcasecmp(line, "exit")) {
+		/* Exit shell. */
+		if (!strcasecmp(args->argv[0], "exit")) {
 			free(line);
 			return 0;
 		}
+
+		cmd_run(args, home_dir);
 
 		free(line);
 		cwd_prompt(prompt, PROMPT_SIZE);
@@ -196,6 +200,7 @@ parse_args(char *line)
 		err(1, "calloc");
 	}
 
+	/* Populate the args struct. */
 	if (!strcmp(argv[0], "bg")) {
 		args->ps = STATE_BG;
 		args->file = argv[1];
@@ -208,6 +213,87 @@ parse_args(char *line)
 
 	return args;
 }
+
+static void
+cmd_run(struct args *a, const char *home_dir)
+{
+	const char	*cmd;
+/* XXX	char		*tempdir; */
+
+	cmd = basename(a->argv[0]);
+
+/* XXX - Need to add cwd to path for err() and warn(). */
+	if (!strcmp(cmd, "cd")) {
+		if (a->argc == 1) {		/* No args to cd. */
+			if (chdir(home_dir) == -1) {
+				warn("%s: %s", cmd, home_dir);
+			}
+		} else if (a->argc == 2) {	/* Only one arg to cd. */
+			if (!strcmp(a->argv[1], "-")) {
+#if 0 /* XXX - Complete later. */
+				if (oldpwd != NULL) {
+
+				} else {
+					warnx("%s: no OLDPWD\n", cmd);
+				}
+#endif
+			} else if (!strcmp(a->argv[1], "~")) {
+				if (chdir(home_dir) == -1) {
+					warn("%s: %s", cmd, home_dir);
+				}
+			} else {
+				/* XXX - Save pwd in oldpwd. */
+				if (chdir(a->argv[1]) == -1) {
+					warn("%s: %s", cmd, a->argv[1]);
+				}
+			}
+		} else {			/* More than one arg to cd. */
+			warnx("%s: too many arguments", cmd);
+			return;
+		}
+	}
+
+#if 0
+done	if cmd is 'cd' then
+done		if no args then
+done			cd to home dir
+done		else if there is only one arg
+XXXskip			if arg is '-' then
+XXXskip				if OLDPWD exists then
+XXXskip					save curdir into tempdir
+XXXskip					cd to OLDPWD
+XXXskip					set OLDPWD to tempdir
+XXXskip					print the now pwd
+XXXskip				else
+XXXskip					error "ssi: cd: no OLDPWD"
+done			else if arg is '~' then
+done				cd to home dir
+done			else
+XXXskip				save pwd in oldpwd
+done				chdir() to new dir in arg
+done		else /* Two or more args */
+done			error "ssi: cd: too many arguments"
+	else if cmd is 'bglist' (or 'jobs')
+		/* print out list of background jobs */
+		while (struct.next != NULL) {
+			print curproc "pid: path options"
+			curstruct = struct.next
+		}
+		print "Total Background Jobs:\t%d"
+	else
+		if cmd is 'bg'
+			shift first arg of arg string to be struct cmd
+			set proc_state to bg
+			fork and exec, but dont wait.
+			detach child from stdin, stdout, stderr
+			add to processes linked list
+		else	/* fg. Just regular fork() and exec(). */
+			fork and exec
+			wait on child exit.
+#endif
+}
+
+
 
 
 #if 0
@@ -224,56 +310,23 @@ done	make up initial custom cwd prompt with function cwd_prompt(pre, post)
 done	while get a line from readline using custom cwd prompt
 XXX actually have a flag set in proc struct, not a global
 
-		struct proc p = parse_line(line); /* Ret alloc struct or NULL */
-			proc_state = fg;	/* Child in fg by default */
-		if (p == NULL)
-			error message;
+done		struct proc p = parse_line(line); /* Ret alloc struct or NULL */
+done			proc_state = fg;	/* Child in fg by default */
+done		if (p == NULL)
+done			error message;
 
-		if cmd is 'cd' then
-			if no args then
-				cd to home dir
-			else if there is only one arg
-				if arg is '-' then
-					if OLDPWD exists then
-						save curdir into tempdir
-						cd to OLDPWD
-						set OLDPWD to tempdir
-						print the now pwd
-					else
-						error "ssi: cd: no OLDPWD"
-				else
-					save pwd in oldpwd
-					chdir() to new dir in arg
-			else /* Two or more args */
-				error "ssi: cd: too many arguments"
-		else if cmd is 'bglist' (or 'jobs')
-			/* print out list of background jobs */
-			while (struct.next != NULL) {
-				print curproc "pid: path options"
-				curstruct = struct.next
-			}
-			print "Total Background Jobs:\t%d"
-		else
-			if cmd is 'bg'
-				shift first arg of arg string to be struct cmd
-				set proc_state to bg
-				fork and exec, but dont wait.
-				detach child from stdin, stdout, stderr
-				add to processes linked list
-			else	/* fg. Just regular fork() and exec(). */
-				fork and exec
-				wait on child exit.
+		cmd logic
+		fork
+		exec
 
 		if child exits then
 			print "pid: cmd options has terminated."
-		update cwd (because could be different now)
+done		update cwd (because could be different now)
 #endif
 
 static void
 usage(void)
 {
-	extern char	*__progname;
-
 	(void)fprintf(stderr, "usage: %s\n", __progname);
 
 	exit(1);
