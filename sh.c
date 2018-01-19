@@ -81,20 +81,19 @@ main(int argc, char *argv[])
 			continue;		/* Skip blank lines. */
 		}
 
-/* XXX */
-int i;
-	for (i = 0; args->argv[i] != '\0'; i++) {
-		printf("argv[%d]: %s\n", i, args->argv[i]);
-	}
-printf("Command name: %s\n", args->file);
-/* XXX */
+	printf("argc: %d\n", args->argc);		/* XXX */
+	int i;						/* XXX */
+	for (i = 0; args->argv[i] != '\0'; i++) {	/* XXX */
+		printf("argv[%d]: %s\n", i, args->argv[i]);	/* XXX */
+	}						/* XXX */
+	printf("Command name: %s\n", args->file);	/* XXX */
+	printf("You wrote: %s\n", line);		/* XXX */
 
 /* XXX Get cmd from struct */
 		if (!strcasecmp(line, "exit")) {
 			free(line);
 			return 0;
 		}
-		printf("You wrote: %s\n", line);
 
 		free(line);
 		cwd_prompt(prompt, PROMPT_SIZE);
@@ -126,42 +125,41 @@ cwd_prompt(char *prompt, size_t promptsize)
 }
 
 /* Does not work with quotes, yet. */
-struct args *
+static struct args *
 parse_args(char *line)
 {
-	enum state {
-			 DELIM,
-			 OTHER
-	} state;
+	enum lex_state {
+			  DELIM,
+			  OTHER
+	} l_state;
 
-	const char	*delim = " \t";	/* Delimiters between arguments. */
-	int		 argc;		/* Count of arguments in string. */
-	char		*c;		/* Current token in string. */
+	const char	 *delim = " \t";	/* Delimiters between args. */
+	int		  argc;		/* Count of arguments in string. */
+	char		**argv;		/* Pointer to array of arg vectors. */
+	char		 *c;		/* Current token in string. */
 
-	char		 *p;
+	char		 *p;		/* Pointer to strdup'd line. */
 	char		**ap;
-	char		**newargv;
-	struct args	 *args;
-	int		  i;			/* XXX */
+	struct args	 *args;		/* All arg details from this line. */
 
 	if (strlen(line) == 0) {	/* Only work on strings with tokens. */
 		return NULL;
 	}
 
 	/* Choose initial state as DELIM if first char is in delim. */
-	(strspn(line, delim) > 0) ? (state = DELIM) : (state = OTHER);
+	(strspn(line, delim) > 0) ? (l_state = DELIM) : (l_state = OTHER);
 
 	argc = 0;
 	for (c = line; *c != '\0'; c++) {
-		switch (state) {
+		switch (l_state) {
 		case DELIM:
 			c += strspn(c, delim) - 1;
-			state = OTHER;
+			l_state = OTHER;
 			break;
 		case OTHER:
 			argc++;
 			c += strcspn(c, delim) - 1;
-			state = DELIM;
+			l_state = DELIM;
 			break;
 		/* No default: since state is an enum; no other cases. */
 		}
@@ -174,58 +172,42 @@ parse_args(char *line)
 		return NULL;
 	}
 
-	char		 *argv[argc + 1];	/* XXX - Here bc needs argc. */
+	/* Need an argv on the heap, not on the stack, so malloc(). */
+	if ((argv = calloc((size_t)argc + 1, sizeof(*argv))) == NULL) {
+		err(1, "calloc");
+	}
 
 	/* Need a copy of the line, since it will be clobbered. */
 	if ((p = strdup(line)) == NULL) {
 		err(1, "strdup");
 	}
 
-	/* Now build argv. */
-	for (ap = argv; ap < &argv[argc] &&
-	    (*ap = strsep(&p, delim)) != NULL;) {
+	/* Build argv. */
+	ap = argv;
+	while (ap < &argv[argc] && (*ap = strsep(&p, delim)) != NULL) {
 		if (**ap != '\0') {
 			ap++;
 		}
 	}
-	*ap = NULL;
 	argv[argc] = (char *)NULL;		/* Last item must be NULL. */
 
-
-	/* Need newargv on the heap, not on the stack like argv. */
-	if ((newargv = calloc((size_t)argc + 1, sizeof(*newargv))) == NULL) {
-		err(1, "calloc");
-	}
-
-	for (i = 0; i < argc; i++) {
-		if ((newargv[i] = strdup(argv[i])) == NULL) {
-			err(1, "strdup");
-		}
-	}
-	newargv[argc] = NULL;
-
-	/* Now make the struct to return with argc and newargv. */
+	/* Allocate space on heap for the struct to return. */
 	if ((args = calloc(1, sizeof(args))) == NULL) {
 		err(1, "calloc");
 	}
 
-	if (!strcmp(newargv[0], "bg")) {
+	if (!strcmp(argv[0], "bg")) {
 		args->ps = STATE_BG;
-		args->file = newargv[1];
+		args->file = argv[1];
 	} else {
 		args->ps = STATE_FG;
-		args->file = newargv[0];
+		args->file = argv[0];
 	}
-	args->argv = newargv;
+	args->argv = argv;
 	args->argc = argc;
-
 
 	return args;
 }
-
-
-
-
 
 
 #if 0
