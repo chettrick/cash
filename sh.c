@@ -39,13 +39,13 @@ struct args {
 struct proc {
 	struct	  proc *next;		/* Next process in process list. */
 	pid_t	  pid;			/* Process id. */
-	struct	  args *a;		/* Process command arguments. */
 	int	  status;		/* Wait status. */
+	struct	  args *a;		/* Process command arguments. */
 };
 
 static void		 cwd_prompt(char *, size_t);
 static struct args	*parse_args(char *);
-static void		 cmd_run(struct args *, const char *);
+static struct proc	*cmd_run(struct args *, const char *);
 static void		 usage(void) __attribute__ ((__noreturn__));
 
 extern char	 *__progname;
@@ -67,6 +67,8 @@ main(int argc, char *argv[])
 	char		 prompt[PROMPT_SIZE];
 	const char	*home_dir;
 	struct args	*args;
+	struct proc	*np;
+	int		 i;					/* XXX */
 
 	if (argc > 1) {
 		usage();
@@ -88,7 +90,6 @@ main(int argc, char *argv[])
 		}
 
 		printf("argc: %d\n", args->argc);		/* XXX */
-		int i;						/* XXX */
 		for (i = 0; args->argv[i] != '\0'; i++) {	/* XXX */
 			printf("argv[%d]: %s\n", i, args->argv[i]); /* XXX */
 		}						/* XXX */
@@ -96,15 +97,22 @@ main(int argc, char *argv[])
 		printf("You wrote: %s\n", line);		/* XXX */
 
 		/* Exit shell. */
+		/* XXX - Move to arg processing and use optional exit code. */
 		if (!strcmp(args->argv[0], "exit")) {
 			free(line);
 			return 0;
 		}
 
-		cmd_run(args, home_dir);
+		if ((np = cmd_run(args, home_dir)) != NULL) {
+			/* XXX - Add returned proc to bg proc list. */
+		}
 
 		free(line);
+		line = NULL;
+
 		cwd_prompt(prompt, PROMPT_SIZE);
+
+		/* Check for bg proc in proc list that have finished. */
 	}
 
 	return 0;
@@ -218,7 +226,7 @@ parse_args(char *line)
 	return args;
 }
 
-static void
+static struct proc *
 cmd_run(struct args *a, const char *home_dir)
 {
 	const char	*cmd;
@@ -255,7 +263,7 @@ cmd_run(struct args *a, const char *home_dir)
 			}
 		} else {			/* More than one arg to cd. */
 			warnx("%s: too many arguments", cmd);
-			return;
+			return NULL;
 		}
 	} else if (!strcmp(cmd, "bglist")) {
 #if 0 /* XXX - Complete later. */
@@ -269,7 +277,7 @@ cmd_run(struct args *a, const char *home_dir)
 	} else {				/* fork() and exec() child. */
 		if ((pid = fork()) == -1) {
 			warn("fork");
-			return;			/* XXX - Return NULL. */
+			return NULL;
 		}
 
 		if (a->ps == STATE_BG) {	/* Background exec(). */
@@ -277,6 +285,7 @@ cmd_run(struct args *a, const char *home_dir)
 
 			} else {		/* Parent. */
 
+				/* XXX return np; */
 			}
 #if 0 /* XXX - Complete later. */
 			shift first arg of arg string to be struct cmd
@@ -307,9 +316,14 @@ cmd_run(struct args *a, const char *home_dir)
 				free(np->a);
 				free(np);
 				np = NULL;
+
+				return NULL;	/* Nothing to send back. */
 			}
 		}
 	}
+
+	return NULL;
+}
 
 #if 0
 done	if cmd is 'cd' then
@@ -349,7 +363,6 @@ done			error "ssi: cd: too many arguments"
 			fork and exec
 			wait on child exit.
 #endif
-}
 
 
 
