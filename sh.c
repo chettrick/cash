@@ -61,6 +61,8 @@ extern char	 *__progname;
  *
  * Caveats: Quoted arguments are not supported.
  *          Backslash escapes are not supported.
+ *          'cd ~' will change to the user's home directory, but
+ *          no filename expansion is done on '~'.
  */
 int
 main(int argc, char *argv[])
@@ -88,6 +90,7 @@ main(int argc, char *argv[])
 		printf("Line length: %lu\n", strlen(line));	/* XXX */
 		if ((args = args_parse(line)) == NULL) {
 			free(line);
+			line = NULL;
 			continue;		/* Skip blank lines. */
 		}
 
@@ -102,6 +105,7 @@ main(int argc, char *argv[])
 		/* XXX - Move to arg processing and use optional exit code. */
 		if (!strcmp(args->argv[0], "exit")) {
 			free(line);
+			line = NULL;
 			return 0;
 		}
 
@@ -282,7 +286,7 @@ proc_run(struct args *a, const char *home_dir)
 				if (chdir(home_dir) == -1) {
 					warn("%s: %s", cmd, home_dir);
 				}
-			} else {
+			} else {		/* Plain cd dir. */
 				/* XXX - Save pwd in oldpwd. */
 				if (chdir(a->argv[1]) == -1) {
 					warn("%s: %s", cmd, a->argv[1]);
@@ -304,15 +308,33 @@ proc_run(struct args *a, const char *home_dir)
 	} else {				/* fork() and exec() child. */
 		if ((pid = fork()) == -1) {
 			warn("fork");
+			args_free(a);
 			return NULL;
 		}
 
 		if (a->ps == STATE_BG) {	/* Background exec(). */
 			if (pid == 0) {		/* Child. */
 
+				/* Okay, now finally run the damn thing. */
+				if (execvp(a->file, a->argv) == -1) {
+					warnx("%s: not found", a->file);
+					args_free(a);
+					_exit(127);	/* 127 cmd not found. */
+				}
 			} else {		/* Parent. */
+				/* Build up process struct. */
+				if ((np = calloc(1, sizeof(np))) == NULL) {
+					err(1, "calloc");
+				}
+				np->next = NULL;
+				np->pid = pid;
+				np->a = a;
+				np->status = 0;
 
-				/* XXX return np; */
+				/* Non-blocking child. */
+				waitpid(np->pid, &np->status, WNOHANG);
+
+				return np; 	/* Return the proc struct. */
 			}
 #if 0 /* XXX - Complete later. */
 			shift first arg of arg string to be struct cmd
