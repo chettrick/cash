@@ -133,11 +133,11 @@ static struct args *
 parse_args(char *line)
 {
 	enum lex_state {
-			  DELIM,
+			  IFS,
 			  OTHER
 	} l_state;
 
-	const char	 *delim = " \t";	/* Delimiters between args. */
+	const char	 *ifs = " \t";	/* Delimiters between args. */
 	int		  argc;		/* Count of arguments in string. */
 	char		**argv;		/* Pointer to array of arg vectors. */
 	char		 *c;		/* Current token in string. */
@@ -150,20 +150,20 @@ parse_args(char *line)
 		return NULL;
 	}
 
-	/* Choose initial state as DELIM if first char is in delim. */
-	(strspn(line, delim) > 0) ? (l_state = DELIM) : (l_state = OTHER);
+	/* Choose initial state as IFS if first char is in ifs. */
+	(strspn(line, ifs) > 0) ? (l_state = IFS) : (l_state = OTHER);
 
 	argc = 0;
 	for (c = line; *c != '\0'; c++) {
 		switch (l_state) {
-		case DELIM:
-			c += strspn(c, delim) - 1;
+		case IFS:
+			c += strspn(c, ifs) - 1;
 			l_state = OTHER;
 			break;
 		case OTHER:
 			argc++;
-			c += strcspn(c, delim) - 1;
-			l_state = DELIM;
+			c += strcspn(c, ifs) - 1;
+			l_state = IFS;
 			break;
 		/* No default: since state is an enum; no other cases. */
 		}
@@ -188,7 +188,7 @@ parse_args(char *line)
 
 	/* Build argv. */
 	ap = argv;
-	while (ap < &argv[argc] && (*ap = strsep(&p, delim)) != NULL) {
+	while (ap < &argv[argc] && (*ap = strsep(&p, ifs)) != NULL) {
 		if (**ap != '\0') {
 			ap++;
 		}
