@@ -45,9 +45,9 @@ struct proc {
 };
 
 static void		 cwd_prompt(char *, size_t);
-static struct args	*parse_args(char *);
-static struct proc	*cmd_run(struct args *, const char *);
+static struct args	*args_parse(char *);
 static void		 args_free(struct args *);
+static struct proc	*proc_run(struct args *, const char *);
 static void		 usage(void) __attribute__ ((__noreturn__));
 
 extern char	 *__progname;
@@ -86,7 +86,7 @@ main(int argc, char *argv[])
 	cwd_prompt(prompt, PROMPT_SIZE);
 	while ((line = readline(prompt)) != NULL) {
 		printf("Line length: %lu\n", strlen(line));	/* XXX */
-		if ((args = parse_args(line)) == NULL) {
+		if ((args = args_parse(line)) == NULL) {
 			free(line);
 			continue;		/* Skip blank lines. */
 		}
@@ -105,7 +105,7 @@ main(int argc, char *argv[])
 			return 0;
 		}
 
-		if ((np = cmd_run(args, home_dir)) != NULL) {
+		if ((np = proc_run(args, home_dir)) != NULL) {
 			/* XXX - Add returned proc to bg proc list. */
 		}
 
@@ -144,7 +144,7 @@ cwd_prompt(char *prompt, size_t promptsize)
 
 /* Does not work with quotes, yet. */
 static struct args *
-parse_args(char *line)
+args_parse(char *line)
 {
 	enum lex_state {
 			  IFS,
@@ -254,7 +254,7 @@ args_free(struct args *a)
 }
 
 static struct proc *
-cmd_run(struct args *a, const char *home_dir)
+proc_run(struct args *a, const char *home_dir)
 {
 	const char	*cmd;
 /* XXX	char		*tempdir; */
