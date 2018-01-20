@@ -7,10 +7,13 @@
  * Christopher Hettrick
  */
 
-#include <err.h>		/* err(3) */
+#include <sys/wait.h>		/* wait(2) */
+
+#include <err.h>		/* err(3), warn(3), warnx(3) */
 #include <libgen.h>		/* basename(3) */
 #include <limits.h>		/* PATH_MAX */
-#include <stdio.h>		/* printf(3), snprintf(3), readline(3) */
+#include <stdio.h>		/* printf(3), fprintf(3), snprintf(3) */
+				/* readline(3) */
 #include <stddef.h>		/* size_t */
 #include <stdlib.h>		/* exit(3), free(3), getenv(3), calloc(3) */
 #include <string.h>		/* strdup(3), strcmp(3), strlen(3) */
@@ -27,16 +30,17 @@ enum proc_state {
 };
 
 struct args {
-	char	 *file;
-	char	**argv;
-	int	  argc;
-	enum	  proc_state ps;
+	char	 *file;			/* (Full) path of new process file. */
+	char	**argv;			/* Argument vectors. */
+	int	  argc;			/* Argument count. */
+	enum	  proc_state ps;	/* Foreground or background process. */
 };
 
 struct proc {
-	struct	  proc *next;
-	pid_t	  pid;
-	struct	  args *a;
+	struct	  proc *next;		/* Next process in process list. */
+	pid_t	  pid;			/* Process id. */
+	struct	  args *a;		/* Process command arguments. */
+	int	  status;		/* Wait status. */
 };
 
 static void		 cwd_prompt(char *, size_t);
@@ -219,6 +223,8 @@ cmd_run(struct args *a, const char *home_dir)
 {
 	const char	*cmd;
 /* XXX	char		*tempdir; */
+	pid_t		 pid;
+	struct proc	*np;
 
 	cmd = basename(a->argv[0]);
 
@@ -250,6 +256,58 @@ cmd_run(struct args *a, const char *home_dir)
 		} else {			/* More than one arg to cd. */
 			warnx("%s: too many arguments", cmd);
 			return;
+		}
+	} else if (!strcmp(cmd, "bglist")) {
+#if 0 /* XXX - Complete later. */
+		/* print out list of background jobs */
+		while (struct.next != NULL) {
+			print curproc "pid: path options"
+			curstruct = struct.next
+		}
+		print "Total Background Jobs:\t%d"
+#endif
+	} else {				/* fork() and exec() child. */
+		if ((pid = fork()) == -1) {
+			warn("fork");
+			return;			/* XXX - Return NULL. */
+		}
+
+		if (a->ps == STATE_BG) {	/* Background exec(). */
+			if (pid == 0) {		/* Child. */
+
+			} else {		/* Parent. */
+
+			}
+#if 0 /* XXX - Complete later. */
+			shift first arg of arg string to be struct cmd
+			set proc_state to bg
+			fork and exec, but dont wait.
+			detach child from stdin, stdout, stderr
+			add to processes linked list
+#endif
+		} else {			/* Foreground exec(). */
+			if (pid == 0) {		/* Child. */
+				if (execvp(a->file, a->argv) == -1) {
+					warnx("%s: not found", a->file);
+				}
+				_exit(127);	/* 127 for cmd not found. */
+			} else {		/* Parent. */
+				/* Build up process struct. */
+				if ((np = calloc(1, sizeof(np))) == NULL) {
+					err(1, "calloc");
+				}
+				np->next = NULL;
+				np->pid = pid;
+				np->a = a;
+				np->status = 0;
+
+				wait(&np->status);	/* Block for child. */
+
+				/* Cleanup after child returns. */
+				free(np->a);
+				free(np);
+				np = NULL;
+			}
 		}
 	}
 
