@@ -13,9 +13,9 @@
 #include <stdio.h>		/* printf(3), snprintf(3), readline(3) */
 #include <stddef.h>		/* size_t */
 #include <stdlib.h>		/* exit(3), free(3), getenv(3), calloc(3) */
-#include <string.h>		/* strdup(3) */
-#include <strings.h>		/* strcasecmp(3) */
-#include <unistd.h>		/* getcwd(3), fork(2) */
+#include <string.h>		/* strdup(3), strcmp(3), strlen(3) */
+				/* strspn(3), strcspn(3), strsep(3) */
+#include <unistd.h>		/* getcwd(3), fork(2), execvp(3) */
 
 #include <readline/readline.h>	/* readline(3) */
 
@@ -92,7 +92,7 @@ main(int argc, char *argv[])
 		printf("You wrote: %s\n", line);		/* XXX */
 
 		/* Exit shell. */
-		if (!strcasecmp(args->argv[0], "exit")) {
+		if (!strcmp(args->argv[0], "exit")) {
 			free(line);
 			return 0;
 		}
