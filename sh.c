@@ -207,6 +207,17 @@ parse_args(char *line)
 	}
 	argv[argc] = (char *)NULL;		/* Last item must be NULL. */
 
+	/* bg without any arguments. */
+	if (argc == 1 && !strcmp(argv[0], "bg")) {
+		warnx("%s: missing command argument", argv[0]);
+		free(argv);
+		argv = NULL;
+		free(p);
+		p = NULL;
+
+		return NULL;
+	}
+
 	/* Allocate space on heap for the struct to return. */
 	if ((args = calloc(1, sizeof(args))) == NULL) {
 		err(1, "calloc");
