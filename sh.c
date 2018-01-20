@@ -31,7 +31,8 @@ enum proc_state {
 
 struct args {
 	char	 *file;			/* (Full) path of new process file. */
-	char	**argv;			/* Argument vectors. */
+	char	**realargv;		/* Immutable pointer to arg vectors. */
+	char	**argv;			/* Mutable pointer to arg vectors. */
 	int	  argc;			/* Argument count. */
 	enum	  proc_state ps;	/* Foreground or background process. */
 };
@@ -46,6 +47,7 @@ struct proc {
 static void		 cwd_prompt(char *, size_t);
 static struct args	*parse_args(char *);
 static struct proc	*cmd_run(struct args *, const char *);
+static void		 args_free(struct args *);
 static void		 usage(void) __attribute__ ((__noreturn__));
 
 extern char	 *__progname;
@@ -225,16 +227,30 @@ parse_args(char *line)
 
 	/* Populate the args struct. */
 	if (!strcmp(argv[0], "bg")) {
-		args->ps = STATE_BG;
 		args->file = argv[1];
+		args->realargv = argv;		/* For passing to free(). */
+		args->argv = &argv[1];		/* for passing to execvp(). */
+		args->argc = argc - 1;
+		args->ps = STATE_BG;		/* Background execution. */
 	} else {
-		args->ps = STATE_FG;
 		args->file = argv[0];
+		args->realargv = argv;		/* For passing to free(). */
+		args->argv = argv;		/* for passing to execvp(). */
+		args->argc = argc;
+		args->ps = STATE_FG;		/* Foreground execution. */
 	}
-	args->argv = argv;
-	args->argc = argc;
 
 	return args;
+}
+
+static void
+args_free(struct args *a)
+{
+	free(a->realargv);
+	a->realargv = NULL;
+	a->argv = NULL;
+	free(a);
+	a = NULL;
 }
 
 static struct proc *
@@ -324,7 +340,7 @@ cmd_run(struct args *a, const char *home_dir)
 				wait(&np->status);	/* Block for child. */
 
 				/* Cleanup after child returns. */
-				free(np->a);
+				args_free(a);
 				free(np);
 				np = NULL;
 
