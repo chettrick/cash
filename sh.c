@@ -21,8 +21,9 @@
 #include <unistd.h>		/* getcwd(3), fork(2), execvp(3) */
 
 #include <readline/readline.h>	/* readline(3) */
+#include <readline/history.h>	/* add_history(3) */
 
-#define PROMPT_SIZE	(5 + PATH_MAX + 3 + 1)
+#define PROMPT_SIZE	(5 + PATH_MAX + 3 + 1)	/* "SSI: " + cwd + " > " + \0 */
 
 enum proc_state {
 	STATE_FG,
@@ -67,12 +68,11 @@ extern char	 *__progname;
 int
 main(int argc, char *argv[])
 {
-	char		*line;
-	char		 prompt[PROMPT_SIZE];
-	const char	*home_dir;
-	struct args	*args;
-	struct proc	*np;
-	int		 i;					/* XXX */
+	char		*line;			/* Readline returned line. */
+	char		 prompt[PROMPT_SIZE];	/* Shell prompt. PS1. */
+	const char	*home_dir;		/* User's home directory. */
+	struct args	*args;			/* Arguments struct. */
+	struct proc	*np;			/* New process. */
 
 	if (argc > 1) {
 		usage();
@@ -87,19 +87,13 @@ main(int argc, char *argv[])
 
 	cwd_prompt(prompt, PROMPT_SIZE);
 	while ((line = readline(prompt)) != NULL) {
-		printf("Line length: %lu\n", strlen(line));	/* XXX */
 		if ((args = args_parse(line)) == NULL) {
 			free(line);
 			line = NULL;
 			continue;		/* Skip blank lines. */
 		}
 
-		printf("argc: %d\n", args->argc);		/* XXX */
-		for (i = 0; args->argv[i] != '\0'; i++) {	/* XXX */
-			printf("argv[%d]: %s\n", i, args->argv[i]); /* XXX */
-		}						/* XXX */
-		printf("Command name: %s\n", args->file);	/* XXX */
-		printf("You wrote: %s\n", line);		/* XXX */
+		add_history(line);		/* Readline history. */
 
 		/* Exit shell. */
 		/* XXX - Move to arg processing and use optional exit code. */
@@ -120,6 +114,10 @@ main(int argc, char *argv[])
 
 		/* Check for bg proc in proc list that have finished. */
 	}
+
+	/* XXX - Run through bg proc list and free all struct procs. */
+	/* XXX	if child exits then */
+	/* XXX		print "pid: cmd options has terminated." */
 
 	return 0;
 }
@@ -146,7 +144,12 @@ cwd_prompt(char *prompt, size_t promptsize)
 	free(buf);
 }
 
-/* Does not work with quotes, yet. */
+/*
+ * Parse supplied string of text into separate arguments.
+ * First argument is the command name.
+ *
+ * Note: Does not work with quotes or filenames with spaces, yet.
+ */
 static struct args *
 args_parse(char *line)
 {
@@ -161,7 +164,7 @@ args_parse(char *line)
 	char		 *c;		/* Current token in string. */
 
 	char		 *p;		/* Pointer to strdup'd line. */
-	char		**ap;
+	char		**ap;		/* Pointer to walk along line. */
 	struct args	 *args;		/* All arg details from this line. */
 
 	if (strlen(line) == 0) {	/* Only work on strings with tokens. */
@@ -187,8 +190,6 @@ args_parse(char *line)
 		}
 	}
 
-	printf("argc: %d\n", argc);		/* XXX */
-
 	/* No args, just whitespace. Do nothing. */
 	if (argc == 0) {
 		return NULL;
@@ -213,7 +214,9 @@ args_parse(char *line)
 	}
 	argv[argc] = (char *)NULL;		/* Last item must be NULL. */
 
-	/* bg without any arguments. */
+	/* bg without any arguments.
+	 * Must be done here since accessing argv[1] is a segfault.
+	 */
 	if (argc == 1 && !strcmp(argv[0], "bg")) {
 		warnx("%s: missing command argument", argv[0]);
 		free(argv);
@@ -374,75 +377,8 @@ proc_run(struct args *a, const char *home_dir)
 	return NULL;
 }
 
-#if 0
-done	if cmd is 'cd' then
-done		if no args then
-done			cd to home dir
-done		else if there is only one arg
-XXXskip			if arg is '-' then
-XXXskip				if OLDPWD exists then
-XXXskip					save curdir into tempdir
-XXXskip					cd to OLDPWD
-XXXskip					set OLDPWD to tempdir
-XXXskip					print the now pwd
-XXXskip				else
-XXXskip					error "ssi: cd: no OLDPWD"
-done			else if arg is '~' then
-done				cd to home dir
-done			else
-XXXskip				save pwd in oldpwd
-done				chdir() to new dir in arg
-done		else /* Two or more args */
-done			error "ssi: cd: too many arguments"
-	else if cmd is 'bglist' (or 'jobs')
-		/* print out list of background jobs */
-		while (struct.next != NULL) {
-			print curproc "pid: path options"
-			curstruct = struct.next
-		}
-		print "Total Background Jobs:\t%d"
-	else
-		if cmd is 'bg'
-			shift first arg of arg string to be struct cmd
-			set proc_state to bg
-			fork and exec, but dont wait.
-			detach child from stdin, stdout, stderr
-			add to processes linked list
-		else	/* fg. Just regular fork() and exec(). */
-			fork and exec
-			wait on child exit.
-#endif
 
 
-
-
-#if 0
-done	args usage();
-
-n/a	char * to mallocd array of paths = parse_path($PATH);
-n/a	if char * is NULL then
-n/a		use _PATH_DEFPATH from paths.h
-
-done	save $HOME directory for use with ~
-
-done	make up initial custom cwd prompt with function cwd_prompt(pre, post)
-
-done	while get a line from readline using custom cwd prompt
-XXX actually have a flag set in proc struct, not a global
-
-done		struct proc p = parse_line(line); /* Ret alloc struct or NULL */
-done			proc_state = fg;	/* Child in fg by default */
-done		if (p == NULL)
-done			error message;
-
-		cmd logic
-		fork
-		exec
-
-		if child exits then
-			print "pid: cmd options has terminated."
-done		update cwd (because could be different now)
-#endif
 
 static void
 usage(void)
