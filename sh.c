@@ -52,7 +52,6 @@ static struct proc	*proc_run(struct args *, const char *);
 static void		 proc_free(struct proc *);
 static void		 usage(void) __attribute__ ((__noreturn__));
 
-extern char	 *__progname;
 
 /* XXX char	 *oldpwd = NULL; */	/* Old working directory. */
 
@@ -394,6 +393,8 @@ proc_free(struct proc *p)
 static void
 usage(void)
 {
+	extern char	*__progname;
+
 	(void)fprintf(stderr, "usage: %s\n", __progname);
 
 	exit(1);
