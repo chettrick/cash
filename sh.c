@@ -49,6 +49,7 @@ static void		 cwd_prompt(char *, size_t);
 static struct args	*args_parse(char *);
 static void		 args_free(struct args *);
 static struct proc	*proc_run(struct args *, const char *);
+static void		 proc_free(struct proc *);
 static void		 usage(void) __attribute__ ((__noreturn__));
 
 extern char	 *__progname;
@@ -95,13 +96,9 @@ main(int argc, char *argv[])
 
 		add_history(line);		/* Readline history. */
 
-		/* Exit shell. */
-		/* XXX - Move to arg processing and use optional exit code. */
-		if (!strcmp(args->argv[0], "exit")) {
-			free(line);
-			line = NULL;
-			return 0;
-		}
+		/* Do not need the line anymore. Free it. */
+		free(line);
+		line = NULL;
 
 		if ((np = proc_run(args, home_dir)) != NULL) {
 			/* XXX - Add returned proc to bg proc list. */
@@ -139,9 +136,12 @@ cwd_prompt(char *prompt, size_t promptsize)
 
 	ret = snprintf(prompt, promptsize, "SSI: %s > ", buf);
 	if (ret == -1 || ret >= (int)promptsize) {
+		free(buf);
+		buf = NULL;
 		err(1, "snprintf");
 	}
 	free(buf);
+	buf = NULL;
 }
 
 /*
@@ -234,18 +234,21 @@ args_parse(char *line)
 
 	/* Populate the args struct. */
 	if (!strcmp(argv[0], "bg")) {
-		args->file = argv[1];
+		args->file = argv[1];		/* Skip first token (bg). */
 		args->realargv = argv;		/* For passing to free(). */
 		args->argv = &argv[1];		/* for passing to execvp(). */
-		args->argc = argc - 1;
+		args->argc = argc - 1;		/* - 1 because skipped bg. */
 		args->ps = STATE_BG;		/* Background execution. */
 	} else {
-		args->file = argv[0];
+		args->file = argv[0];		/* Use first token as file. */
 		args->realargv = argv;		/* For passing to free(). */
 		args->argv = argv;		/* for passing to execvp(). */
 		args->argc = argc;
 		args->ps = STATE_FG;		/* Foreground execution. */
 	}
+
+	free(p);
+	p = NULL;
 
 	return args;
 }
@@ -257,7 +260,6 @@ args_free(struct args *a)
 	a->realargv = NULL;
 	a->argv = NULL;
 	free(a);
-	a = NULL;
 }
 
 static struct proc *
@@ -270,8 +272,14 @@ proc_run(struct args *a, const char *home_dir)
 
 	cmd = basename(a->argv[0]);
 
-/* XXX - Need to add cwd to path for err() and warn(). */
-	if (!strcmp(cmd, "cd")) {
+	/* XXX Need to add cwd to path for err() and warn(). */
+
+	if (!strcmp(cmd, "exit")) {		/* Exit shell. */
+		args_free(a);
+		a = NULL;
+
+		exit(0);
+	} else if (!strcmp(cmd, "cd")) {
 		if (a->argc == 1) {		/* No args to cd. */
 			if (chdir(home_dir) == -1) {
 				warn("%s: %s", cmd, home_dir);
@@ -312,6 +320,8 @@ proc_run(struct args *a, const char *home_dir)
 		if ((pid = fork()) == -1) {
 			warn("fork");
 			args_free(a);
+			a = NULL;
+
 			return NULL;
 		}
 
@@ -322,6 +332,8 @@ proc_run(struct args *a, const char *home_dir)
 				if (execvp(a->file, a->argv) == -1) {
 					warnx("%s: not found", a->file);
 					args_free(a);
+					a = NULL;
+
 					_exit(127);	/* 127 cmd not found. */
 				}
 			} else {		/* Parent. */
@@ -337,15 +349,8 @@ proc_run(struct args *a, const char *home_dir)
 				/* Non-blocking child. */
 				waitpid(np->pid, &np->status, WNOHANG);
 
-				return np; 	/* Return the proc struct. */
+				return np; 	/* Return the proc struct *. */
 			}
-#if 0 /* XXX - Complete later. */
-			shift first arg of arg string to be struct cmd
-			set proc_state to bg
-			fork and exec, but dont wait.
-			detach child from stdin, stdout, stderr
-			add to processes linked list
-#endif
 		} else {			/* Foreground exec(). */
 			if (pid == 0) {		/* Child. */
 				if (execvp(a->file, a->argv) == -1) {
@@ -365,8 +370,7 @@ proc_run(struct args *a, const char *home_dir)
 				wait(&np->status);	/* Block for child. */
 
 				/* Cleanup after child returns. */
-				args_free(a);
-				free(np);
+				proc_free(np);
 				np = NULL;
 
 				return NULL;	/* Nothing to send back. */
@@ -374,9 +378,16 @@ proc_run(struct args *a, const char *home_dir)
 		}
 	}
 
-	return NULL;
+	return NULL;		/* XXX To satiate the compiler. */
 }
 
+static void
+proc_free(struct proc *p)
+{
+	args_free(p->a);
+	p->a = NULL;
+	free(p);
+}
 
 
 
