@@ -48,6 +48,7 @@ struct proc {
 static void		 cwd_prompt(char *, size_t);
 static struct args	*args_parse(char *);
 static void		 args_free(struct args *);
+static int		 builtin_run(struct args *, const char *);
 static struct proc	*proc_run(struct args *, const char *);
 static void		 proc_free(struct proc *);
 static void		 usage(void) __attribute__ ((__noreturn__));
@@ -87,6 +88,7 @@ main(int argc, char *argv[])
 
 	cwd_prompt(prompt, PROMPT_SIZE);
 	while ((line = readline(prompt)) != NULL) {
+		/* Get arguments struct from command line. */
 		if ((args = args_parse(line)) == NULL) {
 			free(line);
 			line = NULL;
@@ -125,8 +127,8 @@ cwd_prompt(char *prompt, size_t promptsize)
 	char		*p;
 	int		 ret;
 
-	if ((buf = malloc((PATH_MAX + 1) * sizeof(char))) == NULL) {
-		err(1, "malloc");
+	if ((buf = calloc(PATH_MAX, sizeof(char))) == NULL) {
+		err(1, "calloc");
 	}
 
 	if ((p = getcwd(buf, PATH_MAX)) == NULL) {
@@ -173,6 +175,7 @@ args_parse(char *line)
 	/* Choose initial state as IFS if first char is in ifs. */
 	(strspn(line, ifs) > 0) ? (l_state = IFS) : (l_state = OTHER);
 
+	/* Split line up based on ifs whitespace; count number of arguments. */
 	argc = 0;
 	for (c = line; *c != '\0'; c++) {
 		switch (l_state) {
@@ -185,7 +188,7 @@ args_parse(char *line)
 			c += strcspn(c, ifs) - 1;
 			l_state = IFS;
 			break;
-		/* No default: since state is an enum; no other cases. */
+		/* No default case since state is an enum; no other cases. */
 		}
 	}
 
@@ -194,8 +197,8 @@ args_parse(char *line)
 		return NULL;
 	}
 
-	/* Need an argv on the heap, not on the stack, so malloc(). */
-	if ((argv = calloc((size_t)argc + 1, sizeof(*argv))) == NULL) {
+	/* Need an argv on the heap, not on the stack, so calloc(). */
+	if ((argv = calloc((size_t)argc, sizeof(*argv))) == NULL) {
 		err(1, "calloc");
 	}
 
@@ -261,13 +264,13 @@ args_free(struct args *a)
 	free(a);
 }
 
-static struct proc *
-proc_run(struct args *a, const char *home_dir)
+static int
+builtin_run(struct args *a, const char *home_dir)
 {
 	const char	*cmd;
-/* XXX	char		*tempdir; */
-	pid_t		 pid;
-	struct proc	*np;
+#if 0
+	char		*tempdir;
+#endif
 
 	cmd = basename(a->argv[0]);
 
@@ -279,11 +282,13 @@ proc_run(struct args *a, const char *home_dir)
 
 		exit(0);
 	} else if (!strcmp(cmd, "cd")) {
-		if (a->argc == 1) {		/* No args to cd. */
+		switch (a->argc) {
+		case 1:				/* No args to cd. */
 			if (chdir(home_dir) == -1) {
 				warn("%s: %s", cmd, home_dir);
 			}
-		} else if (a->argc == 2) {	/* Only one arg to cd. */
+			break;
+		case 2:				/* Only one arg to cd. */
 			if (!strcmp(a->argv[1], "-")) {
 #if 0 /* XXX - Complete later. */
 				if (oldpwd != NULL) {
@@ -302,19 +307,36 @@ proc_run(struct args *a, const char *home_dir)
 					warn("%s: %s", cmd, a->argv[1]);
 				}
 			}
-		} else {			/* More than one arg to cd. */
+			break;
+		default:			/* More than one arg to cd. */
 			warnx("%s: too many arguments", cmd);
-			return NULL;
+			return 1;
 		}
 	} else if (!strcmp(cmd, "bglist")) {
-#if 0 /* XXX - Complete later. */
-		/* print out list of background jobs */
-		while (struct.next != NULL) {
-			print curproc "pid: path options"
-			curstruct = struct.next
-		}
-		print "Total Background Jobs:\t%d"
+		/* Run through the bglist and print it out. */
+#if 0
+		bg_list(bghead);
 #endif
+	} else {				/* Not a builtin. */
+		return 1;
+	}
+
+	return 0;
+}
+
+static struct proc *
+proc_run(struct args *a, const char *home_dir)
+{
+	pid_t		 pid;
+	struct proc	*np;
+#if 0
+	int		 fd;
+#endif
+
+	if (builtin_run(a, home_dir) == 0) {	/* Try builtin cmd first. */
+		args_free(a);
+		a = NULL;
+		return NULL;			/* Was a builtin command. */
 	} else {				/* fork() and exec() child. */
 		if ((pid = fork()) == -1) {
 			warn("fork");
