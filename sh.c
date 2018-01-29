@@ -48,13 +48,14 @@ struct proc {
 static void		 cwd_prompt(char *, size_t);
 static struct args	*args_parse(char *);
 static void		 args_free(struct args *);
+
 static int		 builtin_run(struct args *, const char *);
 static struct proc	*proc_run(struct args *, const char *);
 static void		 proc_free(struct proc *);
+
+
 static void		 usage(void) __attribute__ ((__noreturn__));
 
-
-/* XXX char	 *oldpwd = NULL; */	/* Old working directory. */
 
 /*
  * SSI: Simple Shell Interpreter
@@ -229,7 +230,7 @@ args_parse(char *line)
 		return NULL;
 	}
 
-	/* Allocate space on heap for the struct to return. */
+	/* Allocate space on the heap for the struct to return. */
 	if ((args = calloc(1, sizeof(args))) == NULL) {
 		err(1, "calloc");
 	}
@@ -268,13 +269,8 @@ static int
 builtin_run(struct args *a, const char *home_dir)
 {
 	const char	*cmd;
-#if 0
-	char		*tempdir;
-#endif
 
 	cmd = basename(a->argv[0]);
-
-	/* XXX Need to add cwd to path for err() and warn(). */
 
 	if (!strcmp(cmd, "exit")) {		/* Exit shell. */
 		args_free(a);
@@ -289,20 +285,11 @@ builtin_run(struct args *a, const char *home_dir)
 			}
 			break;
 		case 2:				/* Only one arg to cd. */
-			if (!strcmp(a->argv[1], "-")) {
-#if 0 /* XXX - Complete later. */
-				if (oldpwd != NULL) {
-
-				} else {
-					warnx("%s: no OLDPWD\n", cmd);
-				}
-#endif
-			} else if (!strcmp(a->argv[1], "~")) {
+			if (!strcmp(a->argv[1], "~")) {
 				if (chdir(home_dir) == -1) {
 					warn("%s: %s", cmd, home_dir);
 				}
 			} else {		/* Plain cd dir. */
-				/* XXX - Save pwd in oldpwd. */
 				if (chdir(a->argv[1]) == -1) {
 					warn("%s: %s", cmd, a->argv[1]);
 				}
