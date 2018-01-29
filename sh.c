@@ -41,7 +41,6 @@ struct args {
 struct proc {
 	struct	  proc *next;		/* Next process in process list. */
 	pid_t	  pid;			/* Process id. */
-	int	  status;		/* Wait status. */
 	struct	  args *a;		/* Process command arguments. */
 };
 
@@ -53,9 +52,15 @@ static int		 builtin_run(struct args *, const char *);
 static struct proc	*proc_run(struct args *, const char *);
 static void		 proc_free(struct proc *);
 
+static void		 bg_add(struct proc *);
+static void		 bg_print(struct proc *, char *);
+static void		 bg_list(struct proc *);
+static struct proc	*bg_find(pid_t);
+static void		 bg_remove(struct proc *);
 
 static void		 usage(void) __attribute__ ((__noreturn__));
 
+static struct proc	*bghead = NULL;		/* Bg processes list head. */
 
 /*
  * SSI: Simple Shell Interpreter
@@ -75,6 +80,7 @@ main(int argc, char *argv[])
 	const char	*home_dir;		/* User's home directory. */
 	struct args	*args;			/* Arguments struct. */
 	struct proc	*np;			/* New process. */
+	pid_t		 ch_pid = 0;		/* Child process ID. */
 
 	if (argc > 1) {
 		usage();
@@ -89,6 +95,15 @@ main(int argc, char *argv[])
 
 	cwd_prompt(prompt, PROMPT_SIZE);
 	while ((line = readline(prompt)) != NULL) {
+		/* Check for processes in bglist that have finished. */
+		ch_pid = waitpid(WAIT_MYPGRP, NULL, WNOHANG);
+		while (ch_pid > 0) {		/* Child exited. */
+			/* Remove child from background process list. */
+			bg_remove(bg_find(ch_pid));
+			/* Check for more children exiting. */
+			ch_pid = waitpid(WAIT_MYPGRP, NULL, WNOHANG);
+		}
+
 		/* Get arguments struct from command line. */
 		if ((args = args_parse(line)) == NULL) {
 			free(line);
@@ -98,25 +113,19 @@ main(int argc, char *argv[])
 
 		add_history(line);		/* Readline history. */
 
+		if ((np = proc_run(args, home_dir)) != NULL) {
+			/* Background process. */
+			bg_add(np);
+			np = NULL;
+		}
+
 		/* Do not need the line anymore. Free it. */
 		free(line);
 		line = NULL;
 
-		if ((np = proc_run(args, home_dir)) != NULL) {
-			/* XXX - Add returned proc to bg proc list. */
-		}
-
-		free(line);
-		line = NULL;
-
 		cwd_prompt(prompt, PROMPT_SIZE);
-
-		/* Check for bg proc in proc list that have finished. */
 	}
 
-	/* XXX - Run through bg proc list and free all struct procs. */
-	/* XXX	if child exits then */
-	/* XXX		print "pid: cmd options has terminated." */
 
 	return 0;
 }
@@ -301,9 +310,7 @@ builtin_run(struct args *a, const char *home_dir)
 		}
 	} else if (!strcmp(cmd, "bglist")) {
 		/* Run through the bglist and print it out. */
-#if 0
 		bg_list(bghead);
-#endif
 	} else {				/* Not a builtin. */
 		return 1;
 	}
@@ -316,9 +323,6 @@ proc_run(struct args *a, const char *home_dir)
 {
 	pid_t		 pid;
 	struct proc	*np;
-#if 0
-	int		 fd;
-#endif
 
 	if (builtin_run(a, home_dir) == 0) {	/* Try builtin cmd first. */
 		args_free(a);
@@ -345,6 +349,11 @@ proc_run(struct args *a, const char *home_dir)
 					_exit(127);	/* 127 cmd not found. */
 				}
 			} else {		/* Parent. */
+				/* Wait for non-blocking child. */
+				if (waitpid(WAIT_MYPGRP, NULL, WNOHANG) == -1) {
+					err(1, "waitpid");
+				}
+
 				/* Build up process struct. */
 				if ((np = calloc(1, sizeof(np))) == NULL) {
 					err(1, "calloc");
@@ -352,10 +361,6 @@ proc_run(struct args *a, const char *home_dir)
 				np->next = NULL;
 				np->pid = pid;
 				np->a = a;
-				np->status = 0;
-
-				/* Non-blocking child. */
-				waitpid(np->pid, &np->status, WNOHANG);
 
 				return np; 	/* Return the proc struct *. */
 			}
@@ -373,9 +378,8 @@ proc_run(struct args *a, const char *home_dir)
 				np->next = NULL;
 				np->pid = pid;
 				np->a = a;
-				np->status = 0;
 
-				wait(&np->status);	/* Block for child. */
+				wait(NULL);	/* Block for child. */
 
 				/* Cleanup after child returns. */
 				proc_free(np);
@@ -397,7 +401,117 @@ proc_free(struct proc *p)
 	free(p);
 }
 
+static void
+bg_add(struct proc *p)
+{
+	if (bghead == NULL) {	/* Add first item in list. */
+		bghead = p;
+	} else {		/* Add to front of list. */
+		p->next = bghead;
+		bghead = p;
+	}
+	bg_print(p, NULL);
+}
 
+/*
+ * Print out the background command and arguments followed by
+ * a supplied string s.
+ */
+static void
+bg_print(struct proc *p, char *s)
+{
+	int		 i;
+
+	printf("%d:", p->pid);
+	for (i = 0; i < p->a->argc; i++) {
+		printf(" %s", p->a->argv[i]);
+	}
+	if (s != NULL) {
+		printf("%s", s);
+	}
+	printf("\n");
+}
+
+/*
+ * Run through the bglist and print it out.
+ */
+static void
+bg_list(struct proc *p)
+{
+	int		 jobcnt = 0;
+
+	for (p = bghead; p; p = p->next) {
+		bg_print(p, NULL);
+		jobcnt++;
+	}
+	printf("Total Background Jobs:\t%d\n", jobcnt);
+}
+
+/*
+ * Find a background process by its pid and return a pointer to it.
+ */
+struct proc *
+bg_find(pid_t pid)
+{
+	struct proc	*p;
+
+	if (bghead == NULL) {
+		return NULL;
+	}
+
+	for (p = bghead; p != NULL; p = p->next) {
+		if (p->pid == pid) {
+			/* Found the struct with pid 'pid'. */
+			return p;
+		}
+	}
+
+	/* Can't find the struct with pid 'pid'. */
+	return NULL;
+}
+
+/*
+ * Best effort to remove process identified by struct proc * from the
+ * global background processes list.
+ *
+ * Note: No error code is returned if the process is not found.
+ */
+static void
+bg_remove(struct proc *p)
+{
+	struct proc	*prev;
+	struct proc	*curr;
+
+	/* Nothing to remove. */
+	if (p == NULL) {
+		return;
+	}
+
+	/* Remove the head. */
+	if (p == bghead) {
+		bg_print(p, " has terminated.");
+		bghead = p->next;
+		free(p);
+		return;
+	}
+
+	prev = NULL;
+	for (curr = bghead; curr != NULL; prev = curr, curr = curr->next) {
+		if (curr == p) {
+			bg_print(p, " has terminated.");
+			if (curr->next == NULL) {
+				/* Remove the tail. */
+				prev->next = NULL;
+				free(curr);
+			} else {
+				/* Remove in the middle. */
+				prev->next = curr->next;
+				free(curr);
+			}
+			return;
+		}
+	}
+}
 
 static void
 usage(void)
