@@ -45,11 +45,11 @@ struct proc {
 };
 
 static void		 cwd_prompt(char *, size_t);
-static struct args	*args_parse(char *);
+static struct args	*args_parse(char **);
 static void		 args_free(struct args *);
 
 static int		 builtin_run(struct args *, const char *);
-static struct proc	*proc_run(struct args *, const char *);
+static struct proc	*proc_run(struct args **, const char *);
 static void		 proc_free(struct proc *);
 
 static void		 bg_add(struct proc *);
@@ -78,8 +78,8 @@ main(int argc, char *argv[])
 	char		*line;			/* Readline returned line. */
 	char		 prompt[PROMPT_SIZE];	/* Shell prompt. PS1. */
 	const char	*home_dir;		/* User's home directory. */
-	struct args	*args;			/* Arguments struct. */
-	struct proc	*np;			/* New process. */
+	struct args	*args;			/* Ptr to arguments struct. */
+	struct proc	*np;			/* Ptr to new process. */
 	pid_t		 ch_pid = 0;		/* Child process ID. */
 
 	if (argc > 1) {
@@ -105,7 +105,7 @@ main(int argc, char *argv[])
 		}
 
 		/* Get arguments struct from command line. */
-		if ((args = args_parse(line)) == NULL) {
+		if ((args = args_parse(&line)) == NULL) {
 			free(line);
 			line = NULL;
 			continue;		/* Skip blank lines. */
@@ -113,7 +113,7 @@ main(int argc, char *argv[])
 
 		add_history(line);		/* Readline history. */
 
-		if ((np = proc_run(args, home_dir)) != NULL) {
+		if ((np = proc_run(&args, home_dir)) != NULL) {
 			/* Background process. */
 			bg_add(np);
 			np = NULL;
@@ -162,7 +162,7 @@ cwd_prompt(char *prompt, size_t promptsize)
  * Note: Does not work with quotes or filenames with spaces, yet.
  */
 static struct args *
-args_parse(char *line)
+args_parse(char **line)
 {
 	enum lex_state {
 			  IFS,
@@ -176,18 +176,18 @@ args_parse(char *line)
 
 	char		 *p;		/* Pointer to strdup'd line. */
 	char		**ap;		/* Pointer to walk along line. */
-	struct args	 *args;		/* All arg details from this line. */
+	struct args	*args;		/* All arg details from this line. */
 
-	if (strlen(line) == 0) {	/* Only work on strings with tokens. */
+	if (strlen(*line) == 0) {	/* Only work on strings with tokens. */
 		return NULL;
 	}
 
 	/* Choose initial state as IFS if first char is in ifs. */
-	(strspn(line, ifs) > 0) ? (l_state = IFS) : (l_state = OTHER);
+	(strspn(*line, ifs) > 0) ? (l_state = IFS) : (l_state = OTHER);
 
 	/* Split line up based on ifs whitespace; count number of arguments. */
 	argc = 0;
-	for (c = line; *c != '\0'; c++) {
+	for (c = *line; *c != '\0'; c++) {
 		switch (l_state) {
 		case IFS:
 			c += strspn(c, ifs) - 1;
@@ -213,7 +213,7 @@ args_parse(char *line)
 	}
 
 	/* Need a copy of the line, since it will be clobbered. */
-	if ((p = strdup(line)) == NULL) {
+	if ((p = strdup(*line)) == NULL) {
 		err(1, "strdup");
 	}
 
@@ -319,10 +319,13 @@ builtin_run(struct args *a, const char *home_dir)
 }
 
 static struct proc *
-proc_run(struct args *a, const char *home_dir)
+proc_run(struct args **aa, const char *home_dir)
 {
 	pid_t		 pid;
 	struct proc	*np;
+	struct args	*a;
+
+	a = *aa;
 
 	if (builtin_run(a, home_dir) == 0) {	/* Try builtin cmd first. */
 		args_free(a);
