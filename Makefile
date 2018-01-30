@@ -3,7 +3,7 @@ PROG=		ssi
 SRCS=		sh.c
 
 CFLAGS+=	-g
-CFLAGS+=	-O2 -pipe
+#CFLAGS+=	-O2 -pipe
 CFLAGS+=	-fPIC
 CFLAGS+=	-Wall -Werror -Wextra -Wcast-qual -Wformat=2
 CFLAGS+=	-Wmissing-declarations -pedantic -Wstrict-prototypes

@@ -45,22 +45,25 @@ struct proc {
 };
 
 static void		 cwd_prompt(char *, size_t);
-static struct args	*args_parse(char **);
-static void		 args_free(struct args *);
+static struct args	**args_parse(char **);
+static void		 args_free(struct args **);
 
-static int		 builtin_run(struct args *, const char *);
-static struct proc	*proc_run(struct args **, const char *);
-static void		 proc_free(struct proc *);
+static int		 builtin_run(struct args **, const char *);
+static struct proc	**proc_run(struct args **, const char *);
+#if 0
+static void		 proc_free(struct proc **);
+#endif
 
-static void		 bg_add(struct proc *);
-static void		 bg_print(struct proc *, char *);
-static void		 bg_list(struct proc *);
-static struct proc	*bg_find(pid_t);
-static void		 bg_remove(struct proc *);
+static void		 bg_add(struct proc **);
+static void		 bg_print(struct proc **, char *);
+static void		 bg_list(void);
+static struct proc	**bg_find(pid_t);
+static void		 bg_remove(struct proc **);
+static void		 bg_free(struct proc *);
 
 static void		 usage(void) __attribute__ ((__noreturn__));
 
-static struct proc	*bghead = NULL;		/* Bg processes list head. */
+static struct proc	*bghead = NULL;	/* Bg processes list head. */
 
 /*
  * SSI: Simple Shell Interpreter
@@ -78,9 +81,10 @@ main(int argc, char *argv[])
 	char		*line;			/* Readline returned line. */
 	char		 prompt[PROMPT_SIZE];	/* Shell prompt. PS1. */
 	const char	*home_dir;		/* User's home directory. */
-	struct args	*args;			/* Ptr to arguments struct. */
-	struct proc	*np;			/* Ptr to new process. */
+	struct args	**args;			/* Ptr to arguments struct. */
+	struct proc	**np;			/* Ptr to new process. */
 	pid_t		 ch_pid = 0;		/* Child process ID. */
+	struct proc	**bg_pid;		/* Ptr to ptr to bg struct. */
 
 	if (argc > 1) {
 		usage();
@@ -99,7 +103,9 @@ main(int argc, char *argv[])
 		ch_pid = waitpid(WAIT_MYPGRP, NULL, WNOHANG);
 		while (ch_pid > 0) {		/* Child exited. */
 			/* Remove child from background process list. */
-			bg_remove(bg_find(ch_pid));
+			bg_pid = bg_find(ch_pid);
+			bg_remove(bg_pid);
+			free(*bg_pid);
 			/* Check for more children exiting. */
 			ch_pid = waitpid(WAIT_MYPGRP, NULL, WNOHANG);
 		}
@@ -107,25 +113,35 @@ main(int argc, char *argv[])
 		/* Get arguments struct from command line. */
 		if ((args = args_parse(&line)) == NULL) {
 			free(line);
+#if 0
 			line = NULL;
+#endif
 			continue;		/* Skip blank lines. */
 		}
 
+#if 0
 		add_history(line);		/* Readline history. */
+#endif
 
-		if ((np = proc_run(&args, home_dir)) != NULL) {
+		if ((np = proc_run(args, home_dir)) != NULL) {
 			/* Background process. */
 			bg_add(np);
+#if 0
 			np = NULL;
+#endif
 		}
 
 		/* Do not need the line anymore. Free it. */
 		free(line);
 		line = NULL;
+#if 0
+#endif
 
 		cwd_prompt(prompt, PROMPT_SIZE);
 	}
 
+	/* Free all structs for background processes, but dont kill them. */
+	bg_free(bghead);
 
 	return 0;
 }
@@ -148,11 +164,15 @@ cwd_prompt(char *prompt, size_t promptsize)
 	ret = snprintf(prompt, promptsize, "SSI: %s > ", buf);
 	if (ret == -1 || ret >= (int)promptsize) {
 		free(buf);
+#if 0
 		buf = NULL;
+#endif
 		err(1, "snprintf");
 	}
 	free(buf);
+#if 0
 	buf = NULL;
+#endif
 }
 
 /*
@@ -161,7 +181,7 @@ cwd_prompt(char *prompt, size_t promptsize)
  *
  * Note: Does not work with quotes or filenames with spaces, yet.
  */
-static struct args *
+static struct args **
 args_parse(char **line)
 {
 	enum lex_state {
@@ -177,6 +197,7 @@ args_parse(char **line)
 	char		 *p;		/* Pointer to strdup'd line. */
 	char		**ap;		/* Pointer to walk along line. */
 	struct args	*args;		/* All arg details from this line. */
+	struct args	**retargs;	/* All arg details from this line. */
 
 	if (strlen(*line) == 0) {	/* Only work on strings with tokens. */
 		return NULL;
@@ -232,9 +253,11 @@ args_parse(char **line)
 	if (argc == 1 && !strcmp(argv[0], "bg")) {
 		warnx("%s: missing command argument", argv[0]);
 		free(argv);
+#if 0
 		argv = NULL;
 		free(p);
 		p = NULL;
+#endif
 
 		return NULL;
 	}
@@ -259,31 +282,40 @@ args_parse(char **line)
 		args->ps = STATE_FG;		/* Foreground execution. */
 	}
 
+#if 0
 	free(p);
 	p = NULL;
-
-	return args;
+#endif
+	retargs = &args;
+	return retargs;
 }
 
 static void
-args_free(struct args *a)
+args_free(struct args **aa)
 {
+	struct args *a = *aa;
+
 	free(a->realargv);
+#if 0
 	a->realargv = NULL;
 	a->argv = NULL;
+#endif
 	free(a);
 }
 
 static int
-builtin_run(struct args *a, const char *home_dir)
+builtin_run(struct args **aa, const char *home_dir)
 {
 	const char	*cmd;
+	struct args	*a = *aa;
 
 	cmd = basename(a->argv[0]);
 
 	if (!strcmp(cmd, "exit")) {		/* Exit shell. */
-		args_free(a);
+		args_free(&a);
+#if 0
 		a = NULL;
+#endif
 
 		exit(0);
 	} else if (!strcmp(cmd, "cd")) {
@@ -310,7 +342,7 @@ builtin_run(struct args *a, const char *home_dir)
 		}
 	} else if (!strcmp(cmd, "bglist")) {
 		/* Run through the bglist and print it out. */
-		bg_list(bghead);
+		bg_list();
 	} else {				/* Not a builtin. */
 		return 1;
 	}
@@ -318,24 +350,27 @@ builtin_run(struct args *a, const char *home_dir)
 	return 0;
 }
 
-static struct proc *
+static struct proc **
 proc_run(struct args **aa, const char *home_dir)
 {
 	pid_t		 pid;
-	struct proc	*np;
-	struct args	*a;
+	struct proc	**np;
+	struct proc	*p;
+	struct args	*a = *aa;
 
-	a = *aa;
-
-	if (builtin_run(a, home_dir) == 0) {	/* Try builtin cmd first. */
-		args_free(a);
-		a = NULL;
+	if (builtin_run(aa, home_dir) == 0) {	/* Try builtin cmd first. */
+		args_free(aa);
+#if 0
+		aa = NULL;
+#endif
 		return NULL;			/* Was a builtin command. */
 	} else {				/* fork() and exec() child. */
 		if ((pid = fork()) == -1) {
 			warn("fork");
-			args_free(a);
-			a = NULL;
+			args_free(aa);
+#if 0
+			aa = NULL;
+#endif
 
 			return NULL;
 		}
@@ -346,8 +381,10 @@ proc_run(struct args **aa, const char *home_dir)
 				/* Okay, now finally run the damn thing. */
 				if (execvp(a->file, a->argv) == -1) {
 					warnx("%s: not found", a->file);
-					args_free(a);
-					a = NULL;
+					args_free(aa);
+#if 0
+					aa = NULL;
+#endif
 
 					_exit(127);	/* 127 cmd not found. */
 				}
@@ -358,12 +395,14 @@ proc_run(struct args **aa, const char *home_dir)
 				}
 
 				/* Build up process struct. */
-				if ((np = calloc(1, sizeof(np))) == NULL) {
+				if ((p = calloc(1, sizeof(p))) == NULL) {
 					err(1, "calloc");
 				}
-				np->next = NULL;
-				np->pid = pid;
-				np->a = a;
+				p->next = NULL;
+				p->pid = pid;
+				p->a = a;
+
+				np = &p;
 
 				return np; 	/* Return the proc struct *. */
 			}
@@ -374,19 +413,7 @@ proc_run(struct args **aa, const char *home_dir)
 				}
 				_exit(127);	/* 127 for cmd not found. */
 			} else {		/* Parent. */
-				/* Build up process struct. */
-				if ((np = calloc(1, sizeof(np))) == NULL) {
-					err(1, "calloc");
-				}
-				np->next = NULL;
-				np->pid = pid;
-				np->a = a;
-
 				wait(NULL);	/* Block for child. */
-
-				/* Cleanup after child returns. */
-				proc_free(np);
-				np = NULL;
 
 				return NULL;	/* Nothing to send back. */
 			}
@@ -396,24 +423,31 @@ proc_run(struct args **aa, const char *home_dir)
 	return NULL;		/* XXX To satiate the compiler. */
 }
 
+#if 0
 static void
-proc_free(struct proc *p)
+proc_free(struct proc **np)
 {
-	args_free(p->a);
+	struct proc	*p = *np;
+	args_free(&p->a);
+#if 0
 	p->a = NULL;
+#endif
 	free(p);
 }
+#endif
 
 static void
-bg_add(struct proc *p)
+bg_add(struct proc **np)
 {
+	struct proc	*p = *np;
+
 	if (bghead == NULL) {	/* Add first item in list. */
 		bghead = p;
 	} else {		/* Add to front of list. */
 		p->next = bghead;
 		bghead = p;
 	}
-	bg_print(p, NULL);
+	bg_print(&p, NULL);
 }
 
 /*
@@ -421,9 +455,10 @@ bg_add(struct proc *p)
  * a supplied string s.
  */
 static void
-bg_print(struct proc *p, char *s)
+bg_print(struct proc **np, char *s)
 {
 	int		 i;
+	struct proc	*p = *np;
 
 	printf("%d:", p->pid);
 	for (i = 0; i < p->a->argc; i++) {
@@ -439,12 +474,13 @@ bg_print(struct proc *p, char *s)
  * Run through the bglist and print it out.
  */
 static void
-bg_list(struct proc *p)
+bg_list(void)
 {
+	struct proc	*p;
 	int		 jobcnt = 0;
 
-	for (p = bghead; p; p = p->next) {
-		bg_print(p, NULL);
+	for (p = bghead; p != NULL; p = p->next) {
+		bg_print(&p, NULL);
 		jobcnt++;
 	}
 	printf("Total Background Jobs:\t%d\n", jobcnt);
@@ -453,19 +489,20 @@ bg_list(struct proc *p)
 /*
  * Find a background process by its pid and return a pointer to it.
  */
-struct proc *
+struct proc **
 bg_find(pid_t pid)
 {
-	struct proc	*p;
+	struct proc	**np = &bghead;
+	struct proc	 *p;
 
-	if (bghead == NULL) {
+	if (np == NULL) {
 		return NULL;
 	}
 
-	for (p = bghead; p != NULL; p = p->next) {
+	for (p = *np; p != NULL; p = p->next) {
 		if (p->pid == pid) {
 			/* Found the struct with pid 'pid'. */
-			return p;
+			return np;
 		}
 	}
 
@@ -480,10 +517,11 @@ bg_find(pid_t pid)
  * Note: No error code is returned if the process is not found.
  */
 static void
-bg_remove(struct proc *p)
+bg_remove(struct proc **np)
 {
-	struct proc	*prev;
-	struct proc	*curr;
+	struct proc	*prev = NULL;
+	struct proc	*curr = bghead;;
+	struct proc	*p = *np;
 
 	/* Nothing to remove. */
 	if (p == NULL) {
@@ -491,17 +529,16 @@ bg_remove(struct proc *p)
 	}
 
 	/* Remove the head. */
-	if (p == bghead) {
-		bg_print(p, " has terminated.");
-		bghead = p->next;
+	if (p == curr) {
+		bg_print(&p, " has terminated.");
+		curr = p->next;
 		free(p);
 		return;
 	}
 
-	prev = NULL;
-	for (curr = bghead; curr != NULL; prev = curr, curr = curr->next) {
-		if (curr == p) {
-			bg_print(p, " has terminated.");
+	while (curr != NULL) {
+		if (p == curr) {
+			bg_print(&p, " has terminated.");
 			if (curr->next == NULL) {
 				/* Remove the tail. */
 				prev->next = NULL;
@@ -513,7 +550,18 @@ bg_remove(struct proc *p)
 			}
 			return;
 		}
+		prev = curr;
+		curr = curr->next;
 	}
+}
+
+/*
+ * Free the entire background processes list, but don't kill them.
+ */
+static void
+bg_free(struct proc *p)
+{
+	p++;		/* XXX */
 }
 
 static void
