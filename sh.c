@@ -44,7 +44,13 @@ struct proc {
 	struct	  args *a;		/* Process command arguments. */
 };
 
-static void		 cwd_prompt(char *, size_t);
+static char		 prompt[PROMPT_SIZE];	/* Shell prompt. PS1. */
+
+#if 0
+static struct proc	*bghead = NULL;	/* Bg processes list head. */
+#endif
+
+static void		 cwd_prompt(void);
 static struct args	**args_parse(char **);
 static void		 args_free(struct args **);
 
@@ -52,7 +58,6 @@ static int		 builtin_run(struct args **, const char *);
 static struct proc	**proc_run(struct args **, const char *);
 #if 0
 static void		 proc_free(struct proc **);
-#endif
 
 static void		 bg_add(struct proc **);
 static void		 bg_print(struct proc **, char *);
@@ -60,10 +65,9 @@ static void		 bg_list(void);
 static struct proc	**bg_find(pid_t);
 static void		 bg_remove(struct proc **);
 static void		 bg_free(struct proc *);
+#endif
 
 static void		 usage(void) __attribute__ ((__noreturn__));
-
-static struct proc	*bghead = NULL;	/* Bg processes list head. */
 
 /*
  * SSI: Simple Shell Interpreter
@@ -79,12 +83,13 @@ int
 main(int argc, char *argv[])
 {
 	char		*line;			/* Readline returned line. */
-	char		 prompt[PROMPT_SIZE];	/* Shell prompt. PS1. */
 	const char	*home_dir;		/* User's home directory. */
 	struct args	**args;			/* Ptr to arguments struct. */
 	struct proc	**np;			/* Ptr to new process. */
+#if 0
 	pid_t		 ch_pid = 0;		/* Child process ID. */
 	struct proc	**bg_pid;		/* Ptr to ptr to bg struct. */
+#endif
 
 	if (argc > 1) {
 		usage();
@@ -97,8 +102,9 @@ main(int argc, char *argv[])
 		err(1, "getenv");
 	}
 
-	cwd_prompt(prompt, PROMPT_SIZE);
+	cwd_prompt();
 	while ((line = readline(prompt)) != NULL) {
+#if 0
 		/* Check for processes in bglist that have finished. */
 		ch_pid = waitpid(WAIT_MYPGRP, NULL, WNOHANG);
 		while (ch_pid > 0) {		/* Child exited. */
@@ -109,24 +115,21 @@ main(int argc, char *argv[])
 			/* Check for more children exiting. */
 			ch_pid = waitpid(WAIT_MYPGRP, NULL, WNOHANG);
 		}
+#endif
 
 		/* Get arguments struct from command line. */
 		if ((args = args_parse(&line)) == NULL) {
 			free(line);
-#if 0
 			line = NULL;
-#endif
 			continue;		/* Skip blank lines. */
 		}
 
-#if 0
 		add_history(line);		/* Readline history. */
-#endif
 
 		if ((np = proc_run(args, home_dir)) != NULL) {
+#if 0
 			/* Background process. */
 			bg_add(np);
-#if 0
 			np = NULL;
 #endif
 		}
@@ -134,20 +137,20 @@ main(int argc, char *argv[])
 		/* Do not need the line anymore. Free it. */
 		free(line);
 		line = NULL;
-#if 0
-#endif
 
-		cwd_prompt(prompt, PROMPT_SIZE);
+		cwd_prompt();
 	}
 
+#if 0
 	/* Free all structs for background processes, but dont kill them. */
 	bg_free(bghead);
+#endif
 
 	return 0;
 }
 
 static void
-cwd_prompt(char *prompt, size_t promptsize)
+cwd_prompt(void)
 {
 	char		*buf;
 	char		*p;
@@ -161,18 +164,14 @@ cwd_prompt(char *prompt, size_t promptsize)
 		err(1, "getcwd");
 	}
 
-	ret = snprintf(prompt, promptsize, "SSI: %s > ", buf);
-	if (ret == -1 || ret >= (int)promptsize) {
+	ret = snprintf(prompt, PROMPT_SIZE, "SSI: %s > ", buf);
+	if (ret == -1 || ret >= PROMPT_SIZE) {
 		free(buf);
-#if 0
 		buf = NULL;
-#endif
 		err(1, "snprintf");
 	}
 	free(buf);
-#if 0
 	buf = NULL;
-#endif
 }
 
 /*
@@ -253,11 +252,9 @@ args_parse(char **line)
 	if (argc == 1 && !strcmp(argv[0], "bg")) {
 		warnx("%s: missing command argument", argv[0]);
 		free(argv);
-#if 0
 		argv = NULL;
 		free(p);
 		p = NULL;
-#endif
 
 		return NULL;
 	}
@@ -282,10 +279,8 @@ args_parse(char **line)
 		args->ps = STATE_FG;		/* Foreground execution. */
 	}
 
-#if 0
 	free(p);
 	p = NULL;
-#endif
 	retargs = &args;
 	return retargs;
 }
@@ -296,10 +291,8 @@ args_free(struct args **aa)
 	struct args *a = *aa;
 
 	free(a->realargv);
-#if 0
 	a->realargv = NULL;
 	a->argv = NULL;
-#endif
 	free(a);
 }
 
@@ -313,9 +306,7 @@ builtin_run(struct args **aa, const char *home_dir)
 
 	if (!strcmp(cmd, "exit")) {		/* Exit shell. */
 		args_free(&a);
-#if 0
 		a = NULL;
-#endif
 
 		exit(0);
 	} else if (!strcmp(cmd, "cd")) {
@@ -341,8 +332,10 @@ builtin_run(struct args **aa, const char *home_dir)
 			return 1;
 		}
 	} else if (!strcmp(cmd, "bglist")) {
+#if 0
 		/* Run through the bglist and print it out. */
 		bg_list();
+#endif
 	} else {				/* Not a builtin. */
 		return 1;
 	}
@@ -360,17 +353,13 @@ proc_run(struct args **aa, const char *home_dir)
 
 	if (builtin_run(aa, home_dir) == 0) {	/* Try builtin cmd first. */
 		args_free(aa);
-#if 0
 		aa = NULL;
-#endif
 		return NULL;			/* Was a builtin command. */
 	} else {				/* fork() and exec() child. */
 		if ((pid = fork()) == -1) {
 			warn("fork");
 			args_free(aa);
-#if 0
 			aa = NULL;
-#endif
 
 			return NULL;
 		}
@@ -382,9 +371,7 @@ proc_run(struct args **aa, const char *home_dir)
 				if (execvp(a->file, a->argv) == -1) {
 					warnx("%s: not found", a->file);
 					args_free(aa);
-#if 0
 					aa = NULL;
-#endif
 
 					_exit(127);	/* 127 cmd not found. */
 				}
@@ -429,13 +416,12 @@ proc_free(struct proc **np)
 {
 	struct proc	*p = *np;
 	args_free(&p->a);
-#if 0
 	p->a = NULL;
-#endif
 	free(p);
 }
 #endif
 
+#if 0 /*XXX*/
 static void
 bg_add(struct proc **np)
 {
@@ -563,6 +549,8 @@ bg_free(struct proc *p)
 {
 	p++;		/* XXX */
 }
+
+#endif /*XXX*/
 
 static void
 usage(void)
